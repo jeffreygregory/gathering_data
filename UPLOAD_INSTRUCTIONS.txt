@@ -1,0 +1,10 @@
+GitHub Pages upload bundle
+==========================
+
+Upload EVERY FILE in this folder to the ROOT of your GitHub repository.
+Do not upload github-pages-upload.zip itself; extract it first.
+
+Then open repository Settings > Pages, choose 'Deploy from a branch',
+select the main branch and /(root), and save.
+
+The source RRC archives, Python scripts, and local server are not required.

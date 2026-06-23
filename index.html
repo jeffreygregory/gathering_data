@@ -217,8 +217,7 @@
   <div id="loading" class="loading">Loading producing wells…<small>This can take a moment on the first visit.</small></div>
 
   <script>
-    const DATA_URL = "data/wells.geojson";
-    const DETAILS_URL = "data/well_details.json";
+    const DATA_MANIFEST_URL = "map_manifest.json";
     let allFeatures = [];
     let wellDetails = {};
     let filterTimer;
@@ -417,13 +416,26 @@
 
     map.on("load", async () => {
       try {
-        const [geojsonResponse, detailsResponse] = await Promise.all([fetch(DATA_URL), fetch(DETAILS_URL)]);
-        if (!geojsonResponse.ok || !detailsResponse.ok) throw new Error("Map data files were not found.");
-        const [geojson, details] = await Promise.all([geojsonResponse.json(), detailsResponse.json()]);
+        const manifestResponse = await fetch(DATA_MANIFEST_URL);
+        if (!manifestResponse.ok) throw new Error("Map data manifest was not found.");
+        const manifest = await manifestResponse.json();
+        const responses = await Promise.all([
+          ...manifest.well_files.map(path => fetch(path)),
+          ...manifest.detail_files.map(path => fetch(path))
+        ]);
+        if (responses.some(response => !response.ok)) throw new Error("One or more map data files were not found.");
+        const payloads = await Promise.all(responses.map(response => response.json()));
+        const wellPayloads = payloads.slice(0, manifest.well_files.length);
+        const detailPayloads = payloads.slice(manifest.well_files.length);
+        const geojson = {
+          type: "FeatureCollection",
+          features: wellPayloads.flatMap(payload => payload.features)
+        };
+        const details = Object.assign({}, ...detailPayloads);
         installMapData(geojson, details);
       } catch (error) {
         const loading = document.getElementById("loading");
-        loading.innerHTML = `Could not load the map data.<small>${escapeHtml(error.message)} Start the map with <strong>open_map.bat</strong>.</small>`;
+        loading.innerHTML = `Could not load the map data.<small>${escapeHtml(error.message)} Confirm that all files from the map bundle were uploaded.</small>`;
       }
     });
 
