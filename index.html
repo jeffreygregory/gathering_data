@@ -206,6 +206,13 @@
           </select>
         </div>
       </div>
+      <div class="field">
+        <label for="display-mode">Map display</label>
+        <select id="display-mode">
+          <option value="individual" selected>Individual wells</option>
+          <option value="clusters">Compact clusters</option>
+        </select>
+      </div>
       <button id="reset" type="button">Reset filters</button>
     </section>
     <section class="legend">
@@ -255,6 +262,7 @@
       product: document.getElementById("product"),
       schedule: document.getElementById("schedule")
     };
+    const displayMode = document.getElementById("display-mode");
 
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, char => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
@@ -304,8 +312,16 @@
     function applyFilters() {
       const features = filteredFeatures();
       map.getSource("wells").setData({ type: "FeatureCollection", features });
+      map.getSource("wells-raw").setData({ type: "FeatureCollection", features });
       document.getElementById("visible-count").textContent = features.length.toLocaleString();
       updateLegend(features);
+    }
+
+    function updateDisplayMode() {
+      const clustered = displayMode.value === "clusters";
+      map.setLayoutProperty("clusters", "visibility", clustered ? "visible" : "none");
+      map.setLayoutProperty("cluster-count", "visibility", clustered ? "visible" : "none");
+      map.setLayoutProperty("well-points", "visibility", clustered ? "none" : "visible");
     }
 
     function popupHtml(api) {
@@ -345,8 +361,12 @@
         type: "geojson",
         data: geojson,
         cluster: true,
-        clusterMaxZoom: 10,
-        clusterRadius: 46
+        clusterMaxZoom: 8,
+        clusterRadius: 25
+      });
+      map.addSource("wells-raw", {
+        type: "geojson",
+        data: geojson
       });
       map.addLayer({
         id: "clusters",
@@ -371,12 +391,11 @@
       map.addLayer({
         id: "well-points",
         type: "circle",
-        source: "wells",
-        filter: ["!", ["has", "point_count"]],
+        source: "wells-raw",
         paint: {
           "circle-color": ["get", "color"],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 2.5, 11, 4.5, 16, 7],
-          "circle-opacity": 0.88,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 8, 2.5, 11, 4.5, 16, 7],
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.55, 9, 0.78, 13, 0.9],
           "circle-stroke-color": "#fff",
           "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 7, 0.25, 13, 1]
         }
@@ -409,6 +428,7 @@
         });
       addOptions(controls.county, counties);
       addOptions(controls.gatherer, gatherers);
+      updateDisplayMode();
       document.getElementById("visible-count").textContent = allFeatures.length.toLocaleString();
       updateLegend(allFeatures);
       document.getElementById("loading").classList.add("hidden");
@@ -446,8 +466,11 @@
         filterTimer = setTimeout(applyFilters, name === "search" ? 180 : 0);
       });
     }
+    displayMode.addEventListener("change", updateDisplayMode);
     document.getElementById("reset").addEventListener("click", () => {
       Object.values(controls).forEach(control => { control.value = ""; });
+      displayMode.value = "individual";
+      updateDisplayMode();
       applyFilters();
     });
   </script>
