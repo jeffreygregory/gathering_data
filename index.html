@@ -49,6 +49,9 @@
       background: linear-gradient(135deg, var(--accent-dark), var(--accent));
       border-radius: 17px 17px 0 0;
     }
+    .map-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .map-tabs a { padding: 4px 9px; color: #d9eee9; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; font-size: 11px; font-weight: 750; text-decoration: none; }
+    .map-tabs a.active { color: var(--accent-dark); background: #fff; border-color: #fff; }
 
     .eyebrow {
       margin-bottom: 5px;
@@ -167,8 +170,12 @@
   <aside class="panel" aria-label="Map filters">
     <header class="panel-header">
       <div class="eyebrow">Texas Railroad Commission</div>
-      <h1>Permian Gas Takeaway</h1>
-      <p class="subtitle">Producing wells · current P-4 gatherer names · surface locations</p>
+      <nav class="map-tabs" aria-label="Takeaway map">
+        <a id="gas-map-link" href="index.html">Gas map</a>
+        <a id="oil-map-link" href="index.html?commodity=oil">Oil map</a>
+      </nav>
+      <h1 id="map-title">Permian Gas Takeaway</h1>
+      <p id="map-subtitle" class="subtitle">Producing wells · current P-4 gas gatherer names · surface locations</p>
     </header>
     <section class="metrics">
       <div class="metric"><strong id="visible-count">—</strong><span>Visible wells</span></div>
@@ -181,14 +188,14 @@
       </div>
       <div class="field">
         <label for="county">County</label>
-        <select id="county"><option value="">All 18 counties</option></select>
+        <select id="county"><option value="">All 19 counties</option></select>
       </div>
       <div class="field">
         <label for="gatherer">Dominant gatherer</label>
         <select id="gatherer"><option value="">All gatherers</option></select>
       </div>
       <div class="filter-grid">
-        <div class="field">
+        <div id="well-class-field" class="field">
           <label for="product">Well class</label>
           <select id="product">
             <option value="">Oil and gas</option>
@@ -219,12 +226,34 @@
       <div class="legend-title">Leading gatherers in view</div>
       <div id="legend-items"></div>
     </section>
-    <footer class="note">A point is included only when the wellbore export contains at least one completion whose current well type is <strong>PRODUCING</strong>. Gatherer names come from the supplied P-5 organization file; unmatched legacy identifiers remain number-only.</footer>
+    <footer id="map-note" class="note">A point is included only when the wellbore export contains at least one completion whose current well type is <strong>PRODUCING</strong>. Gatherer names come from the supplied P-5 organization file; unmatched legacy identifiers remain number-only.</footer>
   </aside>
   <div id="loading" class="loading">Loading producing wells…<small>This can take a moment on the first visit.</small></div>
 
   <script>
-    const DATA_MANIFEST_URL = "map_manifest.json";
+    const COMMODITY = new URLSearchParams(window.location.search).get("commodity") === "oil" ? "oil" : "gas";
+    const GAS_MANIFEST_URL = "map_manifest.json";
+    const OIL_MANIFEST_URL = "oil_map_manifest.json";
+    const DATA_MANIFEST_URL = COMMODITY === "oil" ? OIL_MANIFEST_URL : GAS_MANIFEST_URL;
+    const MAP_CONFIG = COMMODITY === "oil" ? {
+      title: "Permian Oil Takeaway",
+      subtitle: "Producing oil wells · current P-4 oil gatherer names · surface locations",
+      commodityLabel: "oil",
+      noProvider: "No current oil gatherer found for this lease."
+    } : {
+      title: "Permian Gas Takeaway",
+      subtitle: "Producing wells · current P-4 gas gatherer names · surface locations",
+      commodityLabel: "gas",
+      noProvider: "No current gas gatherer found for this lease."
+    };
+    document.title = MAP_CONFIG.title;
+    document.getElementById("map-title").textContent = MAP_CONFIG.title;
+    document.getElementById("map-subtitle").textContent = MAP_CONFIG.subtitle;
+    document.getElementById(`${COMMODITY}-map-link`).classList.add("active");
+    if (COMMODITY === "oil") {
+      document.getElementById("well-class-field").classList.add("hidden");
+      document.getElementById("map-note").innerHTML = "A point is included only when the wellbore export contains at least one <strong>PRODUCING oil completion</strong>. Exact P-5 oil-gatherer names and numbers remain available in each popup.";
+    }
     let allFeatures = [];
     let wellDetails = {};
     let filterTimer;
@@ -269,7 +298,7 @@
     })[char]);
 
     const formattedApi = api => `42-${api.slice(0, 3)}-${api.slice(3)}`;
-    const productName = code => ({ F: "Full well stream", G: "Gas-well gas", P: "Casinghead gas" })[code] || code;
+    const productName = code => ({ F: "Full well stream", G: "Gas-well gas", P: "Casinghead gas", O: "Crude oil" })[code] || code;
 
     function addOptions(select, values) {
       for (const value of values) {
@@ -330,7 +359,7 @@
       const completionHtml = detail.records.map(record => {
         const gatherers = record.gatherers.length
           ? record.gatherers.map(g => `<span class="provider-pill">${g.name ? `${escapeHtml(g.name)} · ` : ""}P-5 ${escapeHtml(g.p5)} · ${escapeHtml(g.percent.toFixed(2))}% · ${escapeHtml(productName(g.product))}</span>`).join("")
-          : '<span class="no-provider">No current gas gatherer found for this lease.</span>';
+          : `<span class="no-provider">${escapeHtml(MAP_CONFIG.noProvider)}</span>`;
         const p4Date = record.p4_effective_date ? ` · P-4 effective ${escapeHtml(record.p4_effective_date)}` : "";
         return `<div class="completion">
           <div class="completion-title">${escapeHtml(record.oil_gas)} lease ${escapeHtml(record.lease_number)} · Well ${escapeHtml(record.well_number || "—")}</div>
