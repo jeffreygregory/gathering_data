@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Permian Gas Takeaway</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+  <style>
+    :root {
+      --ink: #17211f;
+      --muted: #65716d;
+      --paper: #f7f5ef;
+      --panel: rgba(255, 255, 252, 0.96);
+      --line: #d9ddd8;
+      --accent: #0d6b5c;
+      --accent-dark: #084b41;
+      --shadow: 0 18px 50px rgba(23, 33, 31, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      color: var(--ink);
+      background: var(--paper);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #map { position: absolute; inset: 0; }
+
+    .panel {
+      position: absolute;
+      z-index: 5;
+      top: 18px;
+      left: 18px;
+      width: min(350px, calc(100vw - 36px));
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      border: 1px solid rgba(113, 126, 120, 0.25);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .panel-header {
+      padding: 20px 20px 16px;
+      color: white;
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+      border-radius: 17px 17px 0 0;
+    }
+
+    .eyebrow {
+      margin-bottom: 5px;
+      color: #bce3d9;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: 24px; line-height: 1.1; letter-spacing: -0.025em; }
+    .subtitle { margin: 8px 0 0; color: #d9eee9; font-size: 12px; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .metric { padding: 13px 18px; background: #fff; }
+    .metric strong { display: block; font-size: 18px; letter-spacing: -0.02em; }
+    .metric span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .controls { padding: 17px 18px 10px; }
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block;
+      margin-bottom: 5px;
+      color: #42504c;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    select, input {
+      width: 100%;
+      height: 38px;
+      padding: 0 11px;
+      color: var(--ink);
+      border: 1px solid #cbd2ce;
+      border-radius: 9px;
+      outline: none;
+      background: #fff;
+      font: inherit;
+    }
+
+    select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(13, 107, 92, 0.12); }
+    .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    button {
+      width: 100%;
+      padding: 9px 12px;
+      color: var(--accent-dark);
+      border: 1px solid #bad0c9;
+      border-radius: 9px;
+      background: #edf6f3;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: #e2f0ec; }
+
+    .legend { padding: 3px 18px 17px; }
+    .legend-title { margin: 7px 0 8px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; margin: 5px 0; font-size: 12px; }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+    .legend-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .note { padding: 12px 18px 16px; color: var(--muted); border-top: 1px solid var(--line); font-size: 11px; }
+
+    .loading {
+      position: absolute;
+      z-index: 8;
+      top: 50%;
+      left: 50%;
+      min-width: 260px;
+      padding: 18px 22px;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: white;
+      box-shadow: var(--shadow);
+      font-weight: 700;
+    }
+    .loading small { display: block; margin-top: 5px; color: var(--muted); font-weight: 400; }
+    .hidden { display: none; }
+
+    .maplibregl-popup-content { width: min(420px, calc(100vw - 40px)); max-height: 70vh; overflow: auto; padding: 0; border-radius: 14px; box-shadow: var(--shadow); }
+    .popup-head { padding: 15px 17px 13px; color: white; background: var(--accent-dark); }
+    .popup-head h2 { margin: 0; font-size: 18px; }
+    .popup-head div { margin-top: 4px; color: #cce8e1; font-size: 12px; }
+    .popup-body { padding: 14px 17px 17px; }
+    .popup-grid { display: grid; grid-template-columns: 110px 1fr; gap: 5px 10px; margin-bottom: 14px; font-size: 12px; }
+    .popup-grid dt { color: var(--muted); }
+    .popup-grid dd { margin: 0; font-weight: 650; }
+    .completion { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .completion:first-of-type { margin-top: 0; }
+    .completion-title { font-weight: 800; }
+    .completion-sub { margin: 3px 0 7px; color: var(--muted); font-size: 11px; }
+    .provider-pill { display: inline-block; margin: 2px 3px 2px 0; padding: 3px 7px; border-radius: 999px; background: #e9f1ee; color: #23463e; font-size: 11px; font-weight: 700; }
+    .no-provider { color: #7c8582; font-size: 11px; font-style: italic; }
+
+    @media (max-width: 680px) {
+      .panel { top: 10px; left: 10px; max-height: 48vh; width: calc(100vw - 20px); }
+      .panel-header { padding: 15px 17px 13px; }
+      h1 { font-size: 20px; }
+      .maplibregl-ctrl-top-right { top: 49vh; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <aside class="panel" aria-label="Map filters">
+    <header class="panel-header">
+      <div class="eyebrow">Texas Railroad Commission</div>
+      <h1>Permian Gas Takeaway</h1>
+      <p class="subtitle">Producing wells · current P-4 gatherer names · surface locations</p>
+    </header>
+    <section class="metrics">
+      <div class="metric"><strong id="visible-count">—</strong><span>Visible wells</span></div>
+      <div class="metric"><strong id="gatherer-count">—</strong><span>Gatherers</span></div>
+    </section>
+    <section class="controls">
+      <div class="field">
+        <label for="search">API or operator</label>
+        <input id="search" type="search" placeholder="e.g. 32912345 or operator name">
+      </div>
+      <div class="field">
+        <label for="county">County</label>
+        <select id="county"><option value="">All 18 counties</option></select>
+      </div>
+      <div class="field">
+        <label for="gatherer">Dominant gatherer</label>
+        <select id="gatherer"><option value="">All gatherers</option></select>
+      </div>
+      <div class="filter-grid">
+        <div class="field">
+          <label for="product">Well class</label>
+          <select id="product">
+            <option value="">Oil and gas</option>
+            <option value="Oil">Oil</option>
+            <option value="Gas">Gas</option>
+            <option value="Oil + Gas">Oil + Gas completion</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="schedule">Schedule</label>
+          <select id="schedule">
+            <option value="">Any</option>
+            <option value="On schedule">On schedule</option>
+            <option value="Off schedule">Off schedule</option>
+          </select>
+        </div>
+      </div>
+      <button id="reset" type="button">Reset filters</button>
+    </section>
+    <section class="legend">
+      <div class="legend-title">Leading gatherers in view</div>
+      <div id="legend-items"></div>
+    </section>
+    <footer class="note">A point is included only when the wellbore export contains at least one completion whose current well type is <strong>PRODUCING</strong>. Gatherer names come from the supplied P-5 organization file; unmatched legacy identifiers remain number-only.</footer>
+  </aside>
+  <div id="loading" class="loading">Loading producing wells…<small>This can take a moment on the first visit.</small></div>
+
+  <script>
+    const DATA_URL = "data/wells.geojson";
+    const DETAILS_URL = "data/well_details.json";
+    let allFeatures = [];
+    let wellDetails = {};
+    let filterTimer;
+
+    const map = new maplibregl.Map({
+      container: "map",
+      center: [-102.4, 31.7],
+      zoom: 5.6,
+      minZoom: 4,
+      maxZoom: 17,
+      attributionControl: false,
+      style: {
+        version: 8,
+        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        sources: {
+          osm: {
+            type: "raster",
+            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors"
+          }
+        },
+        layers: [{ id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": -0.45, "raster-opacity": 0.78 } }]
+      }
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+
+    const controls = {
+      search: document.getElementById("search"),
+      county: document.getElementById("county"),
+      gatherer: document.getElementById("gatherer"),
+      product: document.getElementById("product"),
+      schedule: document.getElementById("schedule")
+    };
+
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+    })[char]);
+
+    const formattedApi = api => `42-${api.slice(0, 3)}-${api.slice(3)}`;
+    const productName = code => ({ F: "Full well stream", G: "Gas-well gas", P: "Casinghead gas" })[code] || code;
+
+    function addOptions(select, values) {
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      }
+    }
+
+    function filteredFeatures() {
+      const query = controls.search.value.trim().toLowerCase();
+      return allFeatures.filter(feature => {
+        const p = feature.properties;
+        return (!controls.county.value || p.county === controls.county.value)
+          && (!controls.gatherer.value || p.gatherer === controls.gatherer.value)
+          && (!controls.product.value || p.oil_gas === controls.product.value)
+          && (!controls.schedule.value || p.schedule === controls.schedule.value)
+          && (!query || `${p.api} ${p.operator} ${p.gatherer}`.toLowerCase().includes(query));
+      });
+    }
+
+    function updateLegend(features) {
+      const counts = new Map();
+      const colors = new Map();
+      for (const { properties: p } of features) {
+        counts.set(p.gatherer, (counts.get(p.gatherer) || 0) + 1);
+        colors.set(p.gatherer, p.color);
+      }
+      const leading = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 10);
+      document.getElementById("legend-items").innerHTML = leading.map(([name, count]) => `
+        <div class="legend-row">
+          <span class="swatch" style="background:${escapeHtml(colors.get(name))}"></span>
+          <span>${escapeHtml(name)}</span>
+          <span class="legend-count">${count.toLocaleString()}</span>
+        </div>`).join("") || '<div class="no-provider">No wells match these filters.</div>';
+      document.getElementById("gatherer-count").textContent = counts.size.toLocaleString();
+    }
+
+    function applyFilters() {
+      const features = filteredFeatures();
+      map.getSource("wells").setData({ type: "FeatureCollection", features });
+      document.getElementById("visible-count").textContent = features.length.toLocaleString();
+      updateLegend(features);
+    }
+
+    function popupHtml(api) {
+      const detail = wellDetails[api];
+      if (!detail) return "<p>Details unavailable.</p>";
+      const completionHtml = detail.records.map(record => {
+        const gatherers = record.gatherers.length
+          ? record.gatherers.map(g => `<span class="provider-pill">${g.name ? `${escapeHtml(g.name)} · ` : ""}P-5 ${escapeHtml(g.p5)} · ${escapeHtml(g.percent.toFixed(2))}% · ${escapeHtml(productName(g.product))}</span>`).join("")
+          : '<span class="no-provider">No current gas gatherer found for this lease.</span>';
+        const p4Date = record.p4_effective_date ? ` · P-4 effective ${escapeHtml(record.p4_effective_date)}` : "";
+        return `<div class="completion">
+          <div class="completion-title">${escapeHtml(record.oil_gas)} lease ${escapeHtml(record.lease_number)} · Well ${escapeHtml(record.well_number || "—")}</div>
+          <div class="completion-sub">${escapeHtml(record.lease_name || "Unnamed lease")} · ${escapeHtml(record.field_name || "Unknown field")}${p4Date}</div>
+          ${gatherers}
+        </div>`;
+      }).join("");
+      return `<div class="popup-head">
+          <h2>${escapeHtml(formattedApi(api))}</h2>
+          <div>${escapeHtml(detail.county)} County · ${escapeHtml(detail.oil_gas)} · Producing</div>
+        </div>
+        <div class="popup-body">
+          <dl class="popup-grid">
+            <dt>Dominant gatherer</dt><dd>${escapeHtml(detail.gatherer)}</dd>
+            <dt>Operator</dt><dd>${escapeHtml(detail.operator || "—")}</dd>
+            <dt>Schedule</dt><dd>${escapeHtml(detail.schedule)}</dd>
+            <dt>Surface location</dt><dd>${detail.latitude.toFixed(6)}, ${detail.longitude.toFixed(6)}</dd>
+            <dt>Completions</dt><dd>${detail.records.length}</dd>
+          </dl>
+          ${completionHtml}
+        </div>`;
+    }
+
+    function installMapData(geojson, details) {
+      allFeatures = geojson.features;
+      wellDetails = details;
+      map.addSource("wells", {
+        type: "geojson",
+        data: geojson,
+        cluster: true,
+        clusterMaxZoom: 10,
+        clusterRadius: 46
+      });
+      map.addLayer({
+        id: "clusters",
+        type: "circle",
+        source: "wells",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": ["step", ["get", "point_count"], "#8fb8ad", 100, "#3f8d7c", 1000, "#0b5c50"],
+          "circle-radius": ["step", ["get", "point_count"], 16, 100, 22, 1000, 30],
+          "circle-stroke-color": "rgba(255,255,255,.9)",
+          "circle-stroke-width": 2
+        }
+      });
+      map.addLayer({
+        id: "cluster-count",
+        type: "symbol",
+        source: "wells",
+        filter: ["has", "point_count"],
+        layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 },
+        paint: { "text-color": "#fff" }
+      });
+      map.addLayer({
+        id: "well-points",
+        type: "circle",
+        source: "wells",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-color": ["get", "color"],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 2.5, 11, 4.5, 16, 7],
+          "circle-opacity": 0.88,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 7, 0.25, 13, 1]
+        }
+      });
+
+      map.on("click", "clusters", async event => {
+        const feature = map.queryRenderedFeatures(event.point, { layers: ["clusters"] })[0];
+        if (!feature) return;
+        const zoom = await map.getSource("wells").getClusterExpansionZoom(feature.properties.cluster_id);
+        map.easeTo({ center: feature.geometry.coordinates, zoom });
+      });
+      map.on("click", "well-points", event => {
+        const feature = event.features?.[0];
+        if (!feature) return;
+        new maplibregl.Popup({ offset: 10, maxWidth: "440px" })
+          .setLngLat(feature.geometry.coordinates)
+          .setHTML(popupHtml(feature.properties.api))
+          .addTo(map);
+      });
+      for (const layer of ["clusters", "well-points"]) {
+        map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+      }
+
+      const counties = [...new Set(allFeatures.map(f => f.properties.county))].sort();
+      const gatherers = [...new Set(allFeatures.map(f => f.properties.gatherer))]
+        .sort((a, b) => {
+          const priority = value => value === "No current gatherer" ? 0 : value === "Multiple" ? 1 : 2;
+          return priority(a) - priority(b) || a.localeCompare(b, undefined, { numeric: true });
+        });
+      addOptions(controls.county, counties);
+      addOptions(controls.gatherer, gatherers);
+      document.getElementById("visible-count").textContent = allFeatures.length.toLocaleString();
+      updateLegend(allFeatures);
+      document.getElementById("loading").classList.add("hidden");
+    }
+
+    map.on("load", async () => {
+      try {
+        const [geojsonResponse, detailsResponse] = await Promise.all([fetch(DATA_URL), fetch(DETAILS_URL)]);
+        if (!geojsonResponse.ok || !detailsResponse.ok) throw new Error("Map data files were not found.");
+        const [geojson, details] = await Promise.all([geojsonResponse.json(), detailsResponse.json()]);
+        installMapData(geojson, details);
+      } catch (error) {
+        const loading = document.getElementById("loading");
+        loading.innerHTML = `Could not load the map data.<small>${escapeHtml(error.message)} Start the map with <strong>open_map.bat</strong>.</small>`;
+      }
+    });
+
+    for (const [name, control] of Object.entries(controls)) {
+      const eventName = name === "search" ? "input" : "change";
+      control.addEventListener(eventName, () => {
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(applyFilters, name === "search" ? 180 : 0);
+      });
+    }
+    document.getElementById("reset").addEventListener("click", () => {
+      Object.values(controls).forEach(control => { control.value = ""; });
+      applyFilters();
+    });
+  </script>
+</body>
+</html>
